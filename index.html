@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>漢字プリント作成ツール</title>
+    <style>
+        /* 全体のスタイル */
+        body {
+            font-family: "Yu Mincho", "MS Mincho", serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 設定パネル（画面表示用・印刷時は消えます） */
+        .controls {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            width: 100%;
+            max-width: 900px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .controls label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .controls input {
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 100px;
+        }
+
+        #sampleString {
+            width: 200px;
+        }
+
+        .btn-generate {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: auto;
+        }
+
+        .btn-print {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: auto;
+        }
+
+        /* 印刷時の設定 */
+        @media print {
+            @page {
+                margin: 0;
+                size: A4;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background-color: white;
+                padding: 0;
+                margin: 0;
+            }
+
+            .sheet {
+                box-shadow: none !important;
+                margin: 0 !important;
+                border: none !important;
+            }
+        }
+
+        /* プリント用紙（A4サイズ固定） */
+        .sheet {
+            background: white;
+            width: 210mm;
+            height: 297mm;
+            padding: 10mm;
+            box-sizing: border-box;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: row-reverse; /* 右から左へ要素を並べる */
+            justify-content: flex-start; /* 右端（氏名欄側）を基準に並べる */
+            gap: 1mm; /* 氏名欄とマス目のすき間を少し詰めて真横に配置 */
+        }
+
+        /* 組・番・名前のエリア（右端） */
+        .header-area {
+            writing-mode: vertical-rl;
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+            font-size: 20px;
+            width: 25mm;
+        }
+
+        .header-item {
+            padding-top: 10px;
+        }
+
+        .name-field {
+            padding-top: 30px;
+        }
+
+        /* 升目のコンテナ領域 */
+        .grid-wrapper {
+            /* flex-growを外して右寄せ（氏名欄寄り）をより確実にします */
+            display: flex;
+            height: 100%;
+        }
+
+        #grid-container {
+            display: grid;
+            width: fit-content;
+            height: fit-content;
+            border: 2px solid #000;
+            box-sizing: border-box;
+            writing-mode: vertical-rl;
+        }
+
+        .cell {
+            border: 1px solid #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            box-sizing: border-box;
+            /* SVGを使って点線の十字を描画 */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'%3E%3Cline x1='50%25' y1='0' x2='50%25' y2='100%25' stroke='%23aaa' stroke-width='1.5' stroke-dasharray='4,4'/%3E%3Cline x1='0' y1='50%25' x2='100%25' y2='50%25' stroke='%23aaa' stroke-width='1.5' stroke-dasharray='4,4'/%3E%3C/svg%3E");
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
+        }
+
+        /* お手本文字（なぞり書き用） */
+        .sample-text {
+            color: #e0e0e0;
+            -webkit-text-stroke: 1px #ccc;
+            paint-order: stroke fill;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls no-print">
+        <div class="control-group">
+            <label for="nRows">縦のマス数 (n)</label>
+            <input type="number" id="nRows" value="5" min="1" max="20">
+        </div>
+        <div class="control-group">
+            <label for="mCols">横の行数 (m)</label>
+            <input type="number" id="mCols" value="5" min="1" max="20">
+        </div>
+        <div class="control-group">
+            <label for="sampleString">お手本の文字</label>
+            <input type="text" id="sampleString" value="頑張ってね" placeholder="例：漢字の練習">
+        </div>
+        <button class="btn-generate" onclick="generateGrid()">プリント更新</button>
+        <button class="btn-print" onclick="window.print()">印刷する</button>
+    </div>
+
+    <div class="sheet">
+        <div class="header-area">
+            <div class="header-item">組</div>
+            <div class="header-item">番</div>
+            <div class="header-item name-field">名前</div>
+        </div>
+
+        <div class="grid-wrapper">
+            <div id="grid-container">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function generateGrid() {
+            const n = parseInt(document.getElementById('nRows').value) || 7;
+            const m = parseInt(document.getElementById('mCols').value) || 5;
+            const sampleStr = document.getElementById('sampleString').value;
+            const container = document.getElementById('grid-container');
+
+            container.innerHTML = '';
+
+            // 印刷可能な領域（mm）
+            const printHeightMm = 267;
+            const printWidthMm = 145;
+
+            // 正方形の１辺の長さを計算
+            const maxCellHeight = printHeightMm / n;
+            const maxCellWidth = printWidthMm / m;
+            const cellSize = Math.min(maxCellHeight, maxCellWidth);
+
+            container.style.gridTemplateColumns = `repeat(${m}, ${cellSize}mm)`;
+            container.style.gridTemplateRows = `repeat(${n}, ${cellSize}mm)`;
+
+            const fontSize = cellSize * 0.7;
+
+            // n × m 個のマスを生成
+            for (let i = 0; i < n * m; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.style.fontSize = `${fontSize}mm`;
+
+                // 一番右の列（最初の n 個のマス）にお手本を入れる
+                if (i < n) {
+                    const char = sampleStr.charAt(i);
+                    if (char) {
+                        const span = document.createElement('span');
+                        span.className = 'sample-text';
+                        span.innerText = char;
+                        cell.appendChild(span);
+                    }
+                }
+
+                container.appendChild(cell);
+            }
+        }
+
+        window.onload = generateGrid;
+    </script>
+</body>
+</html>
